@@ -1,0 +1,89 @@
+- name: Create a sandbox instance
+  hosts: localhost
+  gather_facts: False
+  vars:
+    keypair: ims_engineering
+    instance_type: t2.micro
+    security_group: ims_engineering
+    image: ami-0e742cca61fb65051 
+    region: ap-south-1
+  tasks:
+    - name: Launch instance
+      amazon.aws.ec2:
+         key_name: "{{ keypair }}"
+         group: "{{ security_group }}"
+         instance_type: "{{ instance_type }}"
+         image: "{{ image }}"
+         wait: true
+         region: "{{ region }}"
+         vpc_subnet_id: subnet-ec370584
+         instance_tags:
+           college: ims_engineering
+         assign_public_ip: yes
+         count: 1
+      register: ec2
+
+    - name: Print ec2 data
+      debug:
+        var: ec2
+
+    - name: Add new instance to host group
+      add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: launched
+      loop: "{{ ec2.instances }}"
+
+    - name: Wait for SSH to come up
+      delegate_to: "{{ item.public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+      loop: "{{ ec2.instances }}"
+
+- name: Configure instance(s)
+  hosts: launched
+  become: True
+  remote_user: ec2-user
+  become_user: root
+  gather_facts: True
+  tasks:
+    - name: Install apache web server
+      yum:
+        name: httpd
+        state: present
+    
+    - name: enable and start service
+      service:
+        name: httpd
+        state: started
+        enabled: true
+
+    - name: deploy application
+      copy:
+        content: "Hello World this is from IMS ENGINEERING COLLEGE"
+        dest: /var/www/html/index.html
+
+#   - name: Git checkout
+#     ansible.builtin.git:
+#        repo: 'https://github.com/shkatara/ims_engineering.git'
+#        dest: /var/www/html/
+
+- name: Deploy an Elastic load balancer
+  hosts: localhost
+  tasks:
+    - name: Creating load balancer
+      elb_classic_lb:
+        name: "test-please-delete"
+        state: present
+        security_group_ids: sg-0f4d07b21df4ad823
+        instance_ids:
+          - "{{ item.id }}"
+        zones:
+          - ap-south-1a
+        listeners:
+          - protocol: http # options are http, https, ssl, tcp
+            load_balancer_port: 80
+            instance_port: 80
+        tags:
+          college: ims_engineering
+      loop: "{{ ec2.instances }}"

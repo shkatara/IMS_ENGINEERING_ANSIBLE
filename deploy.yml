@@ -1,0 +1,29 @@
+
+- name: Create a sandbox instance
+  hosts: localhost
+  gather_facts: False
+  vars:
+    keypair: ims_engineering
+    instance_type: t2.micro
+    security_group: ims_engineering
+    image: ami-0e742cca61fb65051 
+    region: ap-south-1
+  tasks:
+    - name: Launch instance
+      amazon.aws.ec2:
+         key_name: "{{ keypair }}"
+         group: "{{ security_group }}"
+         instance_type: "{{ instance_type }}"
+         image: "{{ image }}"
+         wait: true
+         region: "{{ region }}"
+         vpc_subnet_id: subnet-ec370584
+         instance_tags:
+           college: ims_engineering
+         assign_public_ip: yes
+         count: 1
+      register: ec2
+
+    - name: Print ec2 data
+      debug:
+        var: ec2
